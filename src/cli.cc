@@ -115,7 +115,8 @@ main(int argc, char** argv)
     cv::resize(frame1, resized_frame1, new_size, 0, 0, cv::INTER_LINEAR);
     cv::resize(frame2, resized_frame2, new_size, 0, 0, cv::INTER_LINEAR);
 
-    cv::Mat flow = flow::GetFlow(resized_frame1, resized_frame2);
+    int num_levels = frame1.rows / 128;
+    cv::Mat flow = flow::GetFlowUsingPyramid(resized_frame2, resized_frame2, num_levels);
     // cv::Mat flow_vis(flow.size(), CV_8UC3);
 
     // for (int row = 0; row < flow.rows; ++row) {
