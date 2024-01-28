@@ -71,7 +71,7 @@ DrawOpticalFlowArrows(cv::Mat& img,
       // Draw an arrow from (x, y) to (x + fxy.x, y + fxy.y)
       cv::arrowedLine(img,
                       cv::Point(x, y),
-                      cv::Point(x + fxy.x * 1000.0f, y + fxy.y * 1000.0f),
+                      cv::Point(x + fxy.x * 100.0f, y + fxy.y * 100.0f),
                       color,
                       thickness,
                       lineType,
@@ -115,37 +115,8 @@ main(int argc, char** argv)
     cv::resize(frame1, resized_frame1, new_size, 0, 0, cv::INTER_LINEAR);
     cv::resize(frame2, resized_frame2, new_size, 0, 0, cv::INTER_LINEAR);
 
-    int num_levels = frame1.rows / 128;
-    cv::Mat flow = flow::GetFlowUsingPyramid(resized_frame2, resized_frame2, num_levels);
-    // cv::Mat flow_vis(flow.size(), CV_8UC3);
-
-    // for (int row = 0; row < flow.rows; ++row) {
-    //   for (int col = 0; col < flow.cols; ++col) {
-    //     cv::Vec2f flow_vec = flow.at<cv::Vec2f>(row, col);
-    //     flow_vis.at<cv::Vec3b>(row, col) = AngleToRGB(std::atan2(flow_vec[1], flow_vec[0]));
-    //   }
-    // }
-
-    // cv::Mat dst = resized_frame2.clone();
-
-    // int step = 2;
-    // for (int row = 0; row < flow.rows; ++row) {
-    //   for (int col = 0; col < flow.cols; ++col) {
-    //     if (row % step != 0 || col % step != 0)
-    //       continue;
-
-    //     cv::Vec2f flow_vec = flow.at<cv::Vec2f>(row, col);
-    //     float norm = std::sqrt(flow_vec.dot(flow_vec));
-    //     if (norm < 1e-3) {
-    //       continue;
-    //     }
-    //     flow_vec /= norm;
-    //     flow_vec *= 10.0f;
-    //     cv::Point p1(col, row);
-    //     cv::Point p2(col + flow_vec[0], row + flow_vec[1]);
-    //     cv::arrowedLine(dst, p1, p2, cv::Scalar(0, 0, 255), 1);
-    //   }
-    // }
+    int num_levels = frame1.rows / 256;
+    cv::Mat flow = flow::GetFlowUsingPyramid(resized_frame1, resized_frame2, num_levels);
 
     cv::Mat dst = resized_frame1.clone();
     // VisualizeOpticalFlow(flow, dst);

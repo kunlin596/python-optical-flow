@@ -18,7 +18,7 @@ GetFlow(const cv::Mat& prev, const cv::Mat& next)
 
   // Compute Ix and Iy using Sobel operator.
   cv::Mat Ix, Iy;
-  int sobel_kernel_size = 5; // Kernel size for Sobel operator
+  int sobel_kernel_size = 7; // Kernel size for Sobel operator
   cv::Sobel(prev_gray, Ix, CV_32F, 1, 0, sobel_kernel_size);
   cv::Sobel(prev_gray, Iy, CV_32F, 0, 1, sobel_kernel_size);
   Ix.convertTo(Ix, CV_32FC1);
@@ -29,12 +29,12 @@ GetFlow(const cv::Mat& prev, const cv::Mat& next)
   cv::Mat_<float> It;
   temporal_diff.convertTo(It, CV_32FC1);
 
-  cv::GaussianBlur(It, It, cv::Size(5, 5), 0.0);
-  cv::GaussianBlur(Ix, Ix, cv::Size(5, 5), 0.0);
-  cv::GaussianBlur(Iy, Iy, cv::Size(5, 5), 0.0);
+  cv::GaussianBlur(It, It, cv::Size(3, 3), 0.0);
+  cv::GaussianBlur(Ix, Ix, cv::Size(3, 3), 0.0);
+  cv::GaussianBlur(Iy, Iy, cv::Size(3, 3), 0.0);
 
   // For every pixel in the image, compute the optical flow vector for that pixel.
-  int patch_size = 3;
+  int patch_size = 15;
   int half_patch_size = patch_size / 2;
 
   cv::Mat IxIx = Ix.mul(Ix);
@@ -53,7 +53,8 @@ GetFlow(const cv::Mat& prev, const cv::Mat& next)
   Eigen::VectorXf b(2);
 
   // Compute the flow for the pixel at (x, y).
-  float condition_number_threshold = 3.0f;
+  float condition_number_threshold = 10.0f;
+  float eigen_value_threshold = 0.01f;
   for (int y = 0; y < flow.rows; ++y) {
     for (int x = 0; x < flow.cols; ++x) {
       A(0, 0) = IxIx.at<float>(y, x);
@@ -65,7 +66,7 @@ GetFlow(const cv::Mat& prev, const cv::Mat& next)
       Eigen::JacobiSVD<Eigen::MatrixXf> svd(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
       float condition_number =
         svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size() - 1);
-      if (svd.singularValues()(svd.singularValues().size() - 1) < 1e-3f) {
+      if (svd.singularValues()(svd.singularValues().size() - 1) < eigen_value_threshold) {
         continue;
       }
       if (condition_number > condition_number_threshold or std::isnan(condition_number)) {
@@ -91,29 +92,33 @@ GetFlowUsingPyramid(const cv::Mat& image1, const cv::Mat& image2, int num_levels
     // Compute the current level size.
     cv::Size curr_size = cv::Size(image1.cols / (1 << level), image1.rows / (1 << level));
 
-    // Compute the image 2 for the current level.
-    cv::Mat image2_curr_level;
-    cv::resize(image2, image2_curr_level, curr_size);
+    // Store the different versions of image 1 for the current level.
+    cv::Mat image1_curr_level;
+
+    // Store the warped image 1 for the current level.
+    cv::Mat warped_image1_curr_level;
 
     if (level == num_levels - 1) {
       // If this is the last level, initialize the flow to zero.
       flow = cv::Mat::zeros(curr_size, CV_32FC2);
+
+      // Compute the current level image 1.
+      cv::resize(image1, image1_curr_level, curr_size);
+
+      // Bacause this is the last level, there is no flow from the previous level.
+      // Thus all versions of image 1 are the same.
+      image1_prev_level = image1_curr_level;
+      warped_image1_curr_level = image1_curr_level;
     } else {
       assert(!flow.empty());
       // Upsample the flow from the previous level to the current level.
-      cv::resize(flow, flow, curr_size);
-    }
+      flow *= 2.0; // Scale the flow by 2.
+      cv::resize(flow, flow, curr_size, 0, 0, cv::INTER_LINEAR);
 
-    // Upsample the image 1 using the flow from the previous level.
-    image1_prev_level = cv::Mat(curr_size, image1.type());
-    cv::Mat image1_curr_level;
-    cv::resize(image1_prev_level, image1_curr_level, curr_size);
+      // Upsample the image 1 from the previous level to the current level.
+      cv::resize(image1_prev_level, image1_curr_level, curr_size, 0, 0, cv::INTER_LINEAR);
 
-    // Warp the image 1 using the flow from the previous level.
-    cv::Mat warped_image1_curr_level;
-    if (level == num_levels - 1) {
-      warped_image1_curr_level = image1_curr_level;
-    } else {
+      // Warp the image 1 from the previous level to the current level.
       cv::Mat map = cv::Mat::zeros(curr_size, CV_32FC2);
       for (int y = 0; y < map.rows; ++y) {
         for (int x = 0; x < map.cols; ++x) {
@@ -124,8 +129,14 @@ GetFlowUsingPyramid(const cv::Mat& image1, const cv::Mat& image2, int num_levels
       cv::remap(image1_curr_level, warped_image1_curr_level, map, cv::Mat(), cv::INTER_LINEAR);
     }
 
+    // Compute the image 2 for the current level.
+    cv::Mat image2_curr_level;
+    cv::resize(image2, image2_curr_level, curr_size);
+
     // Add the new flow to the flow from the previous level.
     flow += GetFlow(warped_image1_curr_level, image2_curr_level);
+
+    image1_prev_level = image1_curr_level.clone();
   }
   return flow;
 };
